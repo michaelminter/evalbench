@@ -1,0 +1,82 @@
+<section id="summary" class="panel summary">
+  <div class="panel-head">
+    <h2>Results</h2>
+    <div class="progress-wrap">
+      <div class="progress"><div class="bar" style="width: {{ (100 * totals.finished / totals.total) | round | int if totals.total else 0 }}%"></div></div>
+      <span class="muted">{{ totals.finished }}/{{ totals.total }} finished{% if totals.error %} · <span class="bad">{{ totals.error }} failed</span>{% endif %}
+        {% if totals.cost_known %} · {{ totals.cost | cost }} total{% endif %}</span>
+    </div>
+  </div>
+
+  <table class="results">
+    <thead>
+      <tr><th>#</th><th>Model</th><th>Effort</th><th>Status</th><th class="num">Score</th>
+          <th class="num">Time</th><th class="num">In</th><th class="num">Out</th><th class="num">Cost</th></tr>
+    </thead>
+    <tbody>
+    {% for r in ranked_runs %}
+      {% set sc = scores.get(r.id) %}
+      <tr>
+        <td class="muted">{{ rank_of.get(r.id, '') }}</td>
+        <td><a href="#run-{{ r.id }}"><span class="prov prov-{{ r.provider }}">{{ providers[r.provider] }}</span> {{ r.model }}</a>{% if r.repeat > 1 %} <span class="muted">#{{ r.repeat }}</span>{% endif %}</td>
+        <td>{{ r.effort }}</td>
+        <td><span class="pill status-{{ r.status }}">{{ r.status }}</span></td>
+        <td class="num">{% if sc %}<span class="score" style="--s: {{ sc.score }}">{{ '%g' % sc.score }}</span>{% else %}—{% endif %}</td>
+        <td class="num">{{ r.duration_ms | duration }}</td>
+        <td class="num" title="{{ r.cached_tokens or 0 }} cached">{{ r.input_tokens | tokens }}</td>
+        <td class="num" title="{{ r.reasoning_tokens or 0 }} reasoning">{{ r.output_tokens | tokens }}</td>
+        <td class="num">{{ r.cost_usd | cost }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="judge-panel">
+    {% set js = ev.judge_spec %}
+    <div class="judge-status">
+      <h3>Judge{% if js %} <span class="muted">· {{ providers[js.provider] }} {{ js.model }} ({{ js.effort }})</span>{% endif %}</h3>
+      {% if ev.judge_status in ('queued', 'running') %}
+        <p class="muted"><span class="spinner"></span>
+          {{ 'Waiting for runs to finish…' if ev.judge_status == 'queued' else 'Judging…' }}</p>
+      {% elif ev.judge_status == 'error' %}
+        <p class="bad">Judge failed: {{ ev.judge_error }}</p>
+        {% if verdict.raw %}<details><summary>Raw judge output</summary><pre class="raw">{{ verdict.raw }}</pre></details>{% endif %}
+      {% elif ev.judge_status == 'done' %}
+        {% if verdict.summary %}<div class="md judge-summary" data-src="{{ verdict.summary }}"></div>{% endif %}
+        <ol class="rationales">
+          {% for rid in verdict.ranking %}
+            {% set r = ranked_runs | selectattr('id', 'equalto', rid) | first %}
+            {% if r and scores.get(rid) %}
+            <li><strong>{{ r.model }} · {{ r.effort }}{% if r.repeat > 1 %} #{{ r.repeat }}{% endif %}</strong>
+              <span class="score" style="--s: {{ scores[rid].score }}">{{ '%g' % scores[rid].score }}</span>
+              <span class="muted">{{ scores[rid].rationale }}</span></li>
+            {% endif %}
+          {% endfor %}
+        </ol>
+        <p class="muted small">Judged blind, in random order{% if verdict.cost_usd is not none %} · judge cost {{ verdict.cost_usd | cost }}{% endif %}.</p>
+      {% else %}
+        <p class="muted">No judge was selected for this evaluation.</p>
+      {% endif %}
+    </div>
+
+    {% if ev.status == 'done' and ev.judge_status not in ('queued', 'running') and totals.done %}
+    <form class="rejudge" hx-post="/evals/{{ ev.id }}/judge" hx-target="#summary" hx-swap="outerHTML">
+      <select name="judge" class="judge-select-inline">
+        {% for prov in catalog if prov.installed %}
+          <optgroup label="{{ prov.label }}">
+          {% for m in prov.models %}
+            {% set v = prov.id ~ '|' ~ m.id %}
+            <option value="{{ v }}" data-efforts='{{ (["default"] + m.efforts) | tojson }}'
+              {{ 'selected' if js and (js.provider ~ '|' ~ js.model) == v }}>{{ m.label }}</option>
+          {% endfor %}
+          </optgroup>
+        {% endfor %}
+      </select>
+      <select name="judge_effort" class="judge-effort-inline" data-initial="{{ js.effort if js else 'high' }}"></select>
+      <button class="btn btn-small" type="submit">{{ 'Re-judge' if ev.judge_status else 'Judge now' }}</button>
+      <div id="judge-errors"></div>
+    </form>
+    {% endif %}
+  </div>
+  <script type="application/json" class="scores-data">{{ {"scores": scores, "rank": rank_of} | tojson }}</script>
+</section>

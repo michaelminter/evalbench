@@ -1,0 +1,68 @@
+{% set final = run.status in ('done', 'error', 'cancelled') %}
+{% set sc = scores.get(run.id) if scores else none %}
+<article class="card status-{{ run.status }}" id="run-{{ run.id }}" data-run-id="{{ run.id }}"
+         data-status="{{ run.status }}" data-started="{{ run.started_at or '' }}" data-eval-id="{{ ev.id }}">
+  <header>
+    <div class="card-title">
+      <span class="prov prov-{{ run.provider }}">{{ providers[run.provider] }}</span>
+      <strong>{{ run.model }}</strong>
+      <span class="chip">{{ run.effort }}</span>
+      {% if run.repeat > 1 %}<span class="muted">#{{ run.repeat }}</span>{% endif %}
+    </div>
+    <div class="card-status">
+      <span class="score-badge" {{ 'hidden' if not sc }}>{% if sc %}<span class="score" style="--s: {{ sc.score }}">{{ '%g' % sc.score }}</span>{% endif %}</span>
+      <span class="pill status-{{ run.status }} status-pill">{{ run.status }}</span>
+      <span class="elapsed muted">{{ run.duration_ms | duration if final else '' }}</span>
+      {% if not final %}
+      <button class="btn btn-small btn-ghost cancel-run" hx-post="/evals/{{ ev.id }}/runs/{{ run.id }}/cancel" hx-swap="none" title="Cancel this run">✕</button>
+      {% endif %}
+    </div>
+  </header>
+
+  <nav class="tabs">
+    {% if final and run.status != 'cancelled' %}<button type="button" class="tab {{ 'active' if final }}" data-tab="output">Output</button>{% endif %}
+    <button type="button" class="tab {{ 'active' if not final or run.status == 'cancelled' }}" data-tab="transcript">Transcript</button>
+    {% if ev.mode == 'folder' %}<button type="button" class="tab" data-tab="diff">Diff{% if run.diff_stat %} <span class="muted">{{ run.diff_stat | diffshort }}</span>{% endif %}</button>{% endif %}
+    <button type="button" class="tab" data-tab="info">Details</button>
+  </nav>
+
+  <div class="tab-panels">
+    {% if final and run.status != 'cancelled' %}
+    <div class="panel-output tab-panel {{ 'active' if final }}" data-panel="output">
+      {% if run.error %}<div class="error-box">{{ run.error }}</div>{% endif %}
+      {% if run.output %}
+        <div class="md" data-src="{{ run.output }}"></div>
+      {% elif not run.error %}<p class="muted">(empty response)</p>{% endif %}
+    </div>
+    {% endif %}
+    <div class="tab-panel {{ 'active' if not final or run.status == 'cancelled' }}" data-panel="transcript">
+      {% if run.status == 'queued' %}<p class="muted waiting">Queued…</p>{% endif %}
+      <pre class="transcript" data-src="{{ run.transcript or '' }}"></pre>
+    </div>
+    {% if ev.mode == 'folder' %}
+    <div class="tab-panel" data-panel="diff">
+      {% if run.diff %}<pre class="diff" data-src="{{ run.diff }}"></pre>
+      {% elif final %}<p class="muted">No file changes.</p>
+      {% else %}<p class="muted">Available when the run finishes.</p>{% endif %}
+    </div>
+    {% endif %}
+    <div class="tab-panel" data-panel="info">
+      <dl class="kv">
+        {% if sc %}<dt>Judge</dt><dd>{{ sc.rationale }}</dd>{% endif %}
+        {% if run.error %}<dt>Error</dt><dd><pre class="raw">{{ run.error }}</pre></dd>{% endif %}
+        <dt>Tokens</dt><dd>{{ run.input_tokens | tokens }} in ({{ run.cached_tokens | tokens }} cached) · {{ run.output_tokens | tokens }} out ({{ run.reasoning_tokens | tokens }} reasoning)</dd>
+        {% if run.num_turns %}<dt>Turns</dt><dd>{{ run.num_turns }}</dd>{% endif %}
+        <dt>Cost</dt><dd>{{ run.cost_usd | cost }}{% if run.provider == 'codex' and run.cost_usd is none %} <span class="muted">(Codex doesn't report cost; add prices in evalbench.toml)</span>{% endif %}</dd>
+        {% if run.workdir %}<dt>Workspace</dt><dd><code>{{ run.workdir }}</code></dd>{% endif %}
+        {% if run.command %}<dt>Command</dt><dd><code class="cmd">{{ run.command }}</code> <span class="muted">(prompt sent on stdin)</span></dd>{% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <footer class="stats">
+    <span title="wall time">⏱ {{ run.duration_ms | duration }}</span>
+    <span title="input tokens (incl. cached)">↓ {{ run.input_tokens | tokens }}</span>
+    <span title="output tokens (incl. reasoning)">↑ {{ run.output_tokens | tokens }}</span>
+    <span title="cost">{{ run.cost_usd | cost }}</span>
+  </footer>
+</article>

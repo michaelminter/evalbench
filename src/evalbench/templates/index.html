@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}New evaluation · evalbench{% endblock %}
+{% block body_class %}page-new{% endblock %}
+{% block content %}
+{% set p = prefill or {} %}
+{% set selected = p.combos or [] %}
+<form id="eval-form" hx-post="/evals" hx-target="#form-errors" hx-swap="innerHTML" hx-disabled-elt="#submit-btn">
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Prompt</h2>
+      {% if prefill %}<span class="muted">Prefilled from <a href="/evals/{{ p.id }}">{{ p.title }}</a></span>{% endif %}
+    </div>
+    <textarea name="prompt" id="prompt" rows="9" placeholder="The task every model will get, verbatim." required autofocus>{{ p.prompt or '' }}</textarea>
+
+    <div class="mode-row">
+      <div class="segmented" role="radiogroup" aria-label="Mode">
+        <label><input type="radio" name="mode" value="text" {{ 'checked' if p.mode != 'folder' }}> Text only</label>
+        <label><input type="radio" name="mode" value="folder" {{ 'checked' if p.mode == 'folder' }}> Work in a folder</label>
+      </div>
+      <p class="hint" data-mode-hint="text">Models answer the prompt with tools disabled (Claude) or a read-only sandbox (Codex).</p>
+      <p class="hint" data-mode-hint="folder">Each run gets its own copy of the folder; the original is never touched. Changes are shown as a diff.</p>
+    </div>
+
+    <div class="folder-fields" data-show-when="folder">
+      <label class="field">
+        <span>Folder</span>
+        <input type="text" name="folder" value="{{ p.folder or '' }}" placeholder="~/Projects/my-repo"
+               hx-get="/api/folder-check" hx-trigger="input changed delay:400ms, load" hx-target="#folder-status">
+        <small id="folder-status"></small>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="allow_shell" {{ 'checked' if p.allow_shell }}>
+        <span>Let Claude run shell commands without asking <em class="warn">(unsandboxed; it runs as you, in the copy)</em>.
+        Off: Claude can read and edit files only. Codex always runs commands in its workspace-write sandbox.</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Models &amp; effort</h2>
+      <span class="muted">Click a model or effort heading to toggle its whole row or column.</span>
+    </div>
+    <div class="providers">
+    {% for prov in catalog %}
+      <div class="provider" data-provider="{{ prov.id }}">
+        <h3>{{ prov.label }}
+          {% if not prov.installed %}<span class="pill pill-error">CLI not found</span>{% endif %}
+        </h3>
+        <table class="grid {{ 'disabled' if not prov.installed }}">
+          <thead>
+            <tr>
+              <th></th>
+              {% for e in prov.efforts %}<th><button type="button" class="col-toggle" data-effort="{{ e }}">{{ e }}</button></th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for m in prov.models %}
+            <tr data-model="{{ m.id }}">
+              <th><button type="button" class="row-toggle" title="{{ m.id }}">{{ m.label }}</button></th>
+              {% for e in prov.efforts %}
+                <td>
+                {% if e == 'default' or e in m.efforts %}
+                  {% set val = prov.id ~ '|' ~ m.id ~ '|' ~ e %}
+                  <input type="checkbox" name="combo" value="{{ val }}" data-effort="{{ e }}" aria-label="{{ m.label }} {{ e }}"
+                         {{ 'checked' if val in selected }} {{ 'disabled' if not prov.installed }}>
+                {% else %}<span class="na" title="not supported">·</span>{% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if prov.installed %}
+        <div class="add-model">
+          <input type="text" placeholder="Other model id (e.g. {{ 'claude-opus-5-5' if prov.id == 'claude' else 'gpt-5.5' }})" class="custom-model">
+          <button type="button" class="btn btn-small add-model-btn">Add model</button>
+        </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+    </div>
+    {# Selections for models that aren't in the catalog anymore (e.g. prefilled custom models) #}
+    <template id="prefill-combos">{{ selected | tojson }}</template>
+  </section>
+
+  <section class="panel two-col">
+    <div>
+      <h2>Judge</h2>
+      <div class="judge-row">
+        <label class="field">
+          <span>Judge model</span>
+          <select name="judge" id="judge-select">
+            <option value="none">No automatic judging</option>
+            {% set jp = p.judge_spec or {} %}
+            {% for prov in catalog if prov.installed %}
+              <optgroup label="{{ prov.label }}">
+              {% for m in prov.models %}
+                {% set v = prov.id ~ '|' ~ m.id %}
+                <option value="{{ v }}" data-efforts='{{ (["default"] + m.efforts) | tojson }}'
+                  {{ 'selected' if (jp.provider ~ '|' ~ jp.model) == v or (not prefill and loop.first and prov.id == 'claude') }}>{{ m.label }}</option>
+              {% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Judge effort</span>
+          <select name="judge_effort" id="judge-effort" data-initial="{{ jp.effort or 'high' }}"></select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Rubric <small class="muted">(optional; a sensible default is used when empty)</small></span>
+        <textarea name="rubric" rows="4" placeholder="e.g. Must handle empty input. Prefer the standard library. Penalize answers over 200 words.">{{ p.rubric or '' }}</textarea>
+      </label>
+    </div>
+    <div>
+      <h2>Options</h2>
+      <label class="field inline">
+        <span>Repeats per combination</span>
+        <input type="number" name="repeats" min="1" max="10" value="{{ p.repeats or 1 }}">
+      </label>
+      <label class="field inline">
+        <span>Max runs in parallel</span>
+        <input type="number" name="max_parallel" min="1" max="32" value="{{ p.max_parallel or settings.max_parallel }}">
+      </label>
+      <label class="check">
+        <input type="checkbox" name="isolate" {{ 'checked' if (p.isolate if prefill else True) }}>
+        <span>Isolate from my CLI config: skip your personal settings, hooks and MCP servers so runs are comparable.
+          (Your login is still used.)</span>
+      </label>
+    </div>
+  </section>
+
+  <div class="submit-bar">
+    <div id="form-errors"></div>
+    <span id="run-count" class="muted">0 runs</span>
+    <button type="submit" id="submit-btn" class="btn btn-primary">Run evaluation</button>
+  </div>
+</form>
+{% endblock %}

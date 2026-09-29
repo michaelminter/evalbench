@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}History · evalbench{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head"><h2>History</h2><span class="muted">{{ evals | length }} evaluation{{ 's' if evals | length != 1 }}</span></div>
+  {% if not evals %}
+    <p class="muted">Nothing yet. <a href="/">Run your first evaluation →</a></p>
+  {% else %}
+  <table class="results history">
+    <thead><tr><th>When</th><th>Prompt</th><th>Mode</th><th class="num">Runs</th><th>Best</th><th class="num">Cost</th><th></th></tr></thead>
+    <tbody>
+    {% for e in evals %}
+      {% set v = e.judge_result or {} %}
+      <tr id="row-{{ e.id }}">
+        <td class="muted nowrap">{{ e.created_at | when }}</td>
+        <td><a href="/evals/{{ e.id }}">{{ e.title }}</a></td>
+        <td>{{ e.mode }}</td>
+        <td class="num">{{ e.n_done or 0 }}/{{ e.n_runs }}{% if e.n_error %} <span class="bad">({{ e.n_error }} failed)</span>{% endif %}
+          {% if e.status == 'running' %}<span class="pill status-running">running</span>{% endif %}</td>
+        <td>{% if v.ranking and v.scores %}{% set best = v.ranking[0] %}
+              <span class="score" style="--s: {{ v.scores[best].score }}">{{ '%g' % v.scores[best].score }}</span>
+              <span class="muted">{{ e.best }}</span>
+            {% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="num">{{ e.total_cost | cost }}</td>
+        <td class="nowrap">
+          <a class="btn btn-small" href="/?from={{ e.id }}">Run again</a>
+          <button class="btn btn-small btn-ghost" hx-delete="/evals/{{ e.id }}" hx-target="#row-{{ e.id }}" hx-swap="outerHTML"
+                  hx-confirm="Delete this evaluation?">Delete</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

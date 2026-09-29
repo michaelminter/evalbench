@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ ev.title }} · evalbench{% endblock %}
+{% block body_class %}page-eval{% endblock %}
+{% block content %}
+<div id="eval-root" data-eval-id="{{ ev.id }}" data-mode="{{ ev.mode }}">
+  <section class="eval-head">
+    <div class="eval-title">
+      <h1>{{ ev.title }}</h1>
+      <div class="meta">
+        <span>{{ ev.created_at | when }}</span>
+        <span class="pill">{{ 'Folder: ' ~ ev.folder if ev.mode == 'folder' else 'Text only' }}</span>
+        {% if ev.mode == 'folder' and ev.allow_shell %}<span class="pill pill-warn">Claude shell allowed</span>{% endif %}
+        {% if not ev.isolate %}<span class="pill">uses your CLI config</span>{% endif %}
+        <span>{{ runs | length }} run{{ 's' if runs | length != 1 }}, up to {{ ev.max_parallel }} at a time</span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="cancel-all" hx-post="/evals/{{ ev.id }}/cancel" hx-swap="none"
+              {{ 'hidden' if ev.status == 'done' }}>Cancel all</button>
+      <a class="btn" href="/?from={{ ev.id }}">Run again…</a>
+      <a class="btn" href="/evals/{{ ev.id }}/export.csv">CSV</a>
+      <a class="btn" href="/evals/{{ ev.id }}/export.json">JSON</a>
+      <button class="btn btn-danger" hx-delete="/evals/{{ ev.id }}" hx-confirm="Delete this evaluation and its workspaces?">Delete</button>
+    </div>
+  </section>
+
+  <details class="panel prompt-box" {{ 'open' if ev.prompt | length < 1500 }}>
+    <summary>Prompt{% if ev.rubric %} &amp; rubric{% endif %}</summary>
+    <pre class="prompt-text">{{ ev.prompt }}</pre>
+    {% if ev.rubric %}<h4>Rubric</h4><pre class="prompt-text">{{ ev.rubric }}</pre>{% endif %}
+  </details>
+
+  {% include "partials/summary.html" %}
+
+  <section class="cards">
+    {% for run in runs %}{% include "partials/run_card.html" %}{% endfor %}
+  </section>
+</div>
+{% endblock %}
