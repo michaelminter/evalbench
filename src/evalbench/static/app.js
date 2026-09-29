@@ -143,6 +143,32 @@
     applyScores(root);
   }
 
+  // ------------------------------------------------------------ theme
+
+  function initTheme() {
+    const btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    const root = document.documentElement;
+    const sync = () => btn.setAttribute("aria-checked", String(root.dataset.theme === "dark"));
+
+    btn.addEventListener("click", () => {
+      root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      try { localStorage.setItem("theme", root.dataset.theme); } catch { /* storage unavailable */ }
+      sync();
+    });
+
+    // Follow OS changes until the user has picked a theme explicitly.
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+      let saved = null;
+      try { saved = localStorage.getItem("theme"); } catch { /* storage unavailable */ }
+      if (saved) return;
+      root.dataset.theme = e.matches ? "dark" : "light";
+      sync();
+    });
+
+    sync();
+  }
+
   // ------------------------------------------------------------ new-eval page
 
   function initForm() {
@@ -342,6 +368,7 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     enhance(document);
+    initTheme();
     initForm();
     initEval();
     htmx.onLoad((el) => { if (el !== document.body) enhance(el); });

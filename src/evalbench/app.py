@@ -356,4 +356,13 @@ def _register_filters(templates: Jinja2Templates) -> None:
         parts += [f"−{dels.group(1)}"] if dels else []
         return " ".join(parts)
 
+    def static_url(path: str) -> str:
+        """Cache-busting URL: the file's mtime changes the query string whenever it is edited."""
+        try:
+            v = int((HERE / "static" / path).stat().st_mtime)
+        except OSError:
+            v = 0
+        return f"/static/{path}?v={v}"
+
     templates.env.filters.update(duration=duration, tokens=tokens, cost=cost, when=when, diffshort=diffshort)
+    templates.env.globals["static_url"] = static_url
