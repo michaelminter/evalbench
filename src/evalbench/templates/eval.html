@@ -32,7 +32,7 @@
 
   {% include "partials/summary.html" %}
 
-  <section class="cards">
+  <section class="cards" style="--result-columns: {{ runs | length or 1 }}">
     {% for run in runs %}{% include "partials/run_card.html" %}{% endfor %}
   </section>
 </div>

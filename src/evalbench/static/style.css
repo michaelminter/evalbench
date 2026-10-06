@@ -229,7 +229,7 @@ table.results tr:last-child td { border-bottom: 0; }
 .rejudge select { width: auto; padding: 4px 8px; font-size: 13px; }
 #judge-errors { flex-basis: 100%; }
 
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 16px; }
+.cards { display: grid; grid-template-columns: repeat(var(--result-columns, 1), minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
