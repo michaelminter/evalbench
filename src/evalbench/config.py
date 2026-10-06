@@ -7,11 +7,15 @@ directory you start the server from overrides any of it (see README).
 from __future__ import annotations
 
 import json
+import logging
 import os
+import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 
@@ -80,6 +84,64 @@ class Settings:
         return seen
 
 
+def load_claude_models(claude_bin: str = "claude", timeout: float = 10) -> list[dict]:
+    """Query Claude Code's catalog without sending a prompt or generating tokens."""
+    request_id = "evalbench-model-catalog"
+    request = {
+        "type": "control_request", "request_id": request_id,
+        "request": {"subtype": "initialize"},
+    }
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
+    try:
+        with tempfile.TemporaryDirectory(prefix="evalbench-catalog-") as cwd:
+            result = subprocess.run(
+                [claude_bin, "-p", "--input-format", "stream-json",
+                 "--output-format", "stream-json", "--verbose", "--tools", "",
+                 "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence"],
+                input=json.dumps(request) + "\n", text=True, capture_output=True,
+                cwd=cwd, env=env, timeout=timeout, check=True,
+            )
+        for line in result.stdout.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(event, dict) or event.get("type") != "control_response":
+                continue
+            response = event.get("response")
+            if not isinstance(response, dict) or response.get("request_id") != request_id:
+                continue
+            data = response.get("response")
+            if response.get("subtype") != "success" or not isinstance(data, dict):
+                continue
+            entries = data.get("models")
+            if not isinstance(entries, list):
+                continue
+            models, seen = [], set()
+            for entry in entries:
+                if not isinstance(entry, dict) or entry.get("value") in ("default", "opusplan"):
+                    continue
+                model_id = entry.get("resolvedModel") or entry.get("value")
+                if not isinstance(model_id, str) or not model_id or model_id in seen:
+                    continue
+                seen.add(model_id)
+                label = entry.get("displayName")
+                efforts = entry.get("supportedEffortLevels")
+                models.append({
+                    "id": model_id,
+                    "label": label if isinstance(label, str) and label else model_id,
+                    "efforts": [e for e in efforts if e in CLAUDE_EFFORTS]
+                    if isinstance(efforts, list) else [],
+                })
+            if models:
+                return models
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        pass
+    log.warning("Could not read Claude Code's model catalog; using model aliases.")
+    return list(DEFAULT_CLAUDE_MODELS)
+
+
 def load_codex_models(cache_path: Path | None = None) -> list[dict]:
     """Read the model list the Codex CLI itself caches, so the UI matches it."""
     path = cache_path or Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "models_cache.json"
@@ -119,6 +181,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     claude = raw.get("claude", {})
     if "models" in claude:
         s.claude_models = [_norm_model(m) for m in claude["models"]]
+    else:
+        s.claude_models = load_claude_models(s.claude_bin)
     codex = raw.get("codex", {})
     s.codex_models = [_norm_model(m) for m in codex["models"]] if "models" in codex else load_codex_models()
     s.codex_prices = codex.get("prices", {})

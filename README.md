@@ -17,9 +17,11 @@ Options: `--port 9000`, `--no-browser`, `--host` (keep it on localhost; see Secu
 
 ## What it does
 
-1. **Pick a prompt and a grid of model × effort combinations.** Claude models come from a
-   built-in list (`fable`, `opus`, `sonnet`, `haiku` aliases). Codex models are read from the
-   Codex CLI's own cache (`~/.codex/models_cache.json`), so the list matches what `codex` offers.
+1. **Pick a prompt and a grid of model × effort combinations.** Claude models are queried from
+   Claude Code at startup, showing versioned names and supported effort levels. Runs use the
+   resolved model IDs. This query sends no prompt and generates no tokens; if it fails or times
+   out, the list falls back to `fable`, `opus`, `sonnet`, and `haiku` aliases. Codex models are
+   read from the Codex CLI's own cache (`~/.codex/models_cache.json`), so the list matches what `codex` offers.
    You can add any other model id in the UI. `default` means no effort flag is passed.
 2. **Choose a mode.**
    - **Text only**: Claude runs with every tool disabled (`--tools ""`) and Codex in a
