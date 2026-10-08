@@ -6,6 +6,8 @@ time, watch them stream side by side in your browser, and have an LLM judge scor
 It shells out to the `claude` and `codex` CLIs you already have installed and signed in to, so
 it uses your existing subscriptions or API keys. There are no API keys to configure here.
 
+![evalbench showing evaluation results and side-by-side responses from Claude Code and Codex models](docs/images/evalbench-results.png)
+
 ## Quick start
 
 ```bash
